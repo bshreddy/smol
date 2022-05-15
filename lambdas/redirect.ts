@@ -1,4 +1,4 @@
-const handler = async (event: any, context: any) => {
+const handler = async () => {
     return {
         statusCode: 301,
         headers: {
@@ -7,4 +7,4 @@ const handler = async (event: any, context: any) => {
     };
 };
 
-export {handler}
+export {handler};

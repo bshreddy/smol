@@ -2,9 +2,11 @@ const handler = async (event: any, context: any) => {
     return {
         statusCode: 200,
         body: JSON.stringify({
-            message: "Not Yet Implemented"
+            message: 'Not Yet Implemented',
+            event,
+            context
         }),
     };
 };
 
-export {handler}
+export {handler};

@@ -1,3 +1,4 @@
+/* eslint-disable jest/expect-expect */
 // import * as cdk from 'aws-cdk-lib';
 // import { Template } from 'aws-cdk-lib/assertions';
 // import * as UrlShortener from '../lib/url_shortener-stack';

@@ -8,3 +8,4 @@ node_modules
 cdk.out
 cdk.context.out
 .env
+todo.md

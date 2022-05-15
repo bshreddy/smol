@@ -1,14 +1,16 @@
 import * as path from 'path';
-import {Stack, StackProps} from 'aws-cdk-lib';
+import {CloudFrontToApiGateway} from '@aws-solutions-constructs/aws-cloudfront-apigateway';
+import {RemovalPolicy, Stack, StackProps} from 'aws-cdk-lib';
 import {LambdaIntegration, RestApi} from 'aws-cdk-lib/aws-apigateway';
 import {Certificate} from 'aws-cdk-lib/aws-certificatemanager';
-import {Table, Attribute, AttributeType} from 'aws-cdk-lib/aws-dynamodb';
+import {Table, Attribute, AttributeType, BillingMode} from 'aws-cdk-lib/aws-dynamodb';
 import {Runtime} from 'aws-cdk-lib/aws-lambda';
 import {NodejsFunction, NodejsFunctionProps} from 'aws-cdk-lib/aws-lambda-nodejs';
 import {ARecord, HostedZone, RecordTarget} from 'aws-cdk-lib/aws-route53';
-import {ApiGateway} from 'aws-cdk-lib/aws-route53-targets';
+import {ApiGateway, CloudFrontTarget} from 'aws-cdk-lib/aws-route53-targets';
 import {Construct} from 'constructs';
 import * as dotenv from 'dotenv';
+
 
 dotenv.config();
 
@@ -31,7 +33,9 @@ export class UrlShortenerStack extends Stack {
 
         const dynamoTable = new Table(this, 'url_hashes', {
             partitionKey: dynamoTable_partitionKey,
-            tableName: 'url_hashes'
+            tableName: 'url_hashes',
+            removalPolicy: RemovalPolicy.DESTROY,
+            billingMode: BillingMode.PAY_PER_REQUEST
         });
 
         const nodejsFunctionProps: NodejsFunctionProps = {
@@ -62,19 +66,19 @@ export class UrlShortenerStack extends Stack {
         dynamoTable.grantReadData(redirectLambda);
 
         const api = new RestApi(this, 'url_shortener_api', {
-            restApiName: 'URL Shortener Service',
-            domainName: {
-                domainName: domainName,
-                certificate: Certificate.fromCertificateArn(
-                    this,
-                    'domainCertificate',
-                    certificateArn
-                ),
-            },
+            restApiName: 'URL Shortener Service'
         });
 
         api.root.addMethod('POST', new LambdaIntegration(registerLambda));
         api.root.addMethod('GET', new LambdaIntegration(redirectLambda));
+
+        const cloudFrontToApiGateway = new CloudFrontToApiGateway(this, 'test-cloudfront-apigateway', {
+            existingApiGatewayObj: api,
+            cloudFrontDistributionProps: {
+                certificate: Certificate.fromCertificateArn(this, 'certificate', certificateArn),
+                domainNames: [domainName]
+            }
+        });
 
         const hostedZone = HostedZone.fromLookup(this, 'hostedZone', {
             domainName: rootDomain
@@ -84,7 +88,7 @@ export class UrlShortenerStack extends Stack {
         const domainRecord = new ARecord(this, 'domainRecord', {
             recordName: domainName,
             zone: hostedZone,
-            target: RecordTarget.fromAlias(new ApiGateway(api)),
+            target: RecordTarget.fromAlias(new CloudFrontTarget(cloudFrontToApiGateway.cloudFrontWebDistribution)),
         });
     }
 }

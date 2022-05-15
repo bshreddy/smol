@@ -1,26 +1,28 @@
 import * as path from 'path';
-import {Stack, StackProps, CfnParameter} from 'aws-cdk-lib';
+import {Stack, StackProps} from 'aws-cdk-lib';
 import {LambdaIntegration, RestApi} from 'aws-cdk-lib/aws-apigateway';
+import {Certificate} from 'aws-cdk-lib/aws-certificatemanager';
 import {Table, Attribute, AttributeType} from 'aws-cdk-lib/aws-dynamodb';
 import {Runtime} from 'aws-cdk-lib/aws-lambda';
 import {NodejsFunction, NodejsFunctionProps} from 'aws-cdk-lib/aws-lambda-nodejs';
 import {ARecord, HostedZone, RecordTarget} from 'aws-cdk-lib/aws-route53';
 import {ApiGateway} from 'aws-cdk-lib/aws-route53-targets';
 import {Construct} from 'constructs';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 export class UrlShortenerStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        const subdomain = new CfnParameter(this, 'subdomain', {
-            type: 'String',
-            description: 'Subdomain that will be used to access the shortener',
-        });
-
-        const hostedZoneId = new CfnParameter(this, 'hostedZoneId', {
-            type: 'String',
-            description: 'Hosted zone ID that will be used to create the DNS record',
-        });
+        const {subDomain, rootDomain, certificateArn} = {
+            subDomain: '',
+            rootDomain: '',
+            certificateArn: '',
+            ...process.env
+        };
+        const domainName = `${subDomain}.${rootDomain}`;
 
         const dynamoTable_partitionKey: Attribute = {
             name: 'hash',
@@ -61,16 +63,26 @@ export class UrlShortenerStack extends Stack {
 
         const api = new RestApi(this, 'url_shortener_api', {
             restApiName: 'URL Shortener Service',
+            domainName: {
+                domainName: domainName,
+                certificate: Certificate.fromCertificateArn(
+                    this,
+                    'domainCertificate',
+                    certificateArn
+                ),
+            },
         });
 
         api.root.addMethod('POST', new LambdaIntegration(registerLambda));
         api.root.addMethod('GET', new LambdaIntegration(redirectLambda));
 
-        const hostedZone = HostedZone.fromHostedZoneId(this, 'hostedZone', hostedZoneId.valueAsString);
+        const hostedZone = HostedZone.fromLookup(this, 'hostedZone', {
+            domainName: rootDomain
+        });
 
         // eslint-disable-next-line no-unused-vars
         const domainRecord = new ARecord(this, 'domainRecord', {
-            recordName: `${subdomain.valueAsString}.${hostedZone.zoneName}`,
+            recordName: domainName,
             zone: hostedZone,
             target: RecordTarget.fromAlias(new ApiGateway(api)),
         });

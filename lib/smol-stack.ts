@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { CloudFrontToApiGateway } from '@aws-solutions-constructs/aws-cloudfront-apigateway';
 import { RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
-import { LambdaIntegration, RestApi } from 'aws-cdk-lib/aws-apigateway';
+import { EndpointType, LambdaIntegration, RestApi } from 'aws-cdk-lib/aws-apigateway';
 import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Table, Attribute, AttributeType, BillingMode } from 'aws-cdk-lib/aws-dynamodb';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
@@ -32,6 +32,7 @@ export class SmolStack extends Stack {
         };
 
         const dynamoTable = new Table(this, 'url_hashes', {
+            tableName: `${id}-urls`,
             partitionKey: dynamoTable_partitionKey,
             removalPolicy: RemovalPolicy.DESTROY,
             billingMode: BillingMode.PAY_PER_REQUEST
@@ -45,8 +46,9 @@ export class SmolStack extends Stack {
             },
             depsLockFilePath: path.join(__dirname, '..', 'lambdas', 'package-lock.json'),
             environment: {
-                PRIMARY_KEY: dynamoTable_partitionKey.name,
-                TABLE_NAME: dynamoTable.tableName,
+                primaryKey: dynamoTable_partitionKey.name,
+                tableName: dynamoTable.tableName,
+                ROOT_DOMAIN: rootDomain,
             },
             runtime: Runtime.NODEJS_16_X
         };
@@ -65,11 +67,18 @@ export class SmolStack extends Stack {
         dynamoTable.grantReadData(redirectLambda);
 
         const api = new RestApi(this, 'smol_api', {
-            restApiName: 'URL Shortener Service'
+            restApiName: `${id}-api`,
+            endpointConfiguration: {
+                types: [EndpointType.REGIONAL]
+            }
         });
 
         api.root.addMethod('POST', new LambdaIntegration(registerLambda));
         api.root.addMethod('GET', new LambdaIntegration(redirectLambda));
+
+        const redirectApi = api.root.addResource('{hash}');
+
+        redirectApi.addMethod('GET', new LambdaIntegration(redirectLambda));
 
         const cloudFrontToApiGateway = new CloudFrontToApiGateway(this, 'test-cloudfront-apigateway', {
             existingApiGatewayObj: api,

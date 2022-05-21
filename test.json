@@ -1,0 +1,11 @@
+{
+    "id": {
+        "S": "hashhh"
+    },
+    "url": {
+        "S": "https://www.google.com"
+    },
+    "ttl": {
+        "N": "1653159659729"
+    }
+}

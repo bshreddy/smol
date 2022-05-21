@@ -3,6 +3,11 @@ import { APIGatewayEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
 
 const dynDB = new DynamoDB.DocumentClient();
+const { tableName, primaryKey } = {
+    tableName: '',
+    primaryKey: '',
+    ...process.env
+};
 
 const redirectTo = (redirectUrl: string): APIGatewayProxyResult => {
     return {
@@ -16,35 +21,26 @@ const redirectTo = (redirectUrl: string): APIGatewayProxyResult => {
 
 const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
     if (!event.pathParameters || !event.pathParameters.hash) {
-        return redirectTo(`http://${process.env.ROOT_DOMAIN}` ?? 'https://bshreddy.com');
+        return redirectTo(`http://${process.env.rootDomain}` ?? 'https://bshreddy.com');
     }
 
     const { hash } = event.pathParameters;
-    const { tableName, primaryKey } = {
-        tableName: '',
-        primaryKey: '',
-        ...process.env
-    };
 
     try {
-        const params = {
+        const res = await dynDB.get({
             TableName: tableName,
             Key: {
                 [primaryKey]: hash
             }
-        };
-
-        console.log(`PARAMS\n${JSON.stringify(params, null, 2)}`);
-
-        const res = await dynDB.get(params).promise();
+        }).promise();
 
         const item = res.Item;
 
         if (item) {
+            console.log(`Request succeeded. ${hash} is associated with ${item.url}`);
+
             return redirectTo(item.url);
         } else {
-            console.log(`ENVIRONMENT VARIABLES\n${JSON.stringify(process.env, null, 2)}`);
-            console.log(`EVENT\n${JSON.stringify(event, null, 2)}`);
             console.error(`Input Error: Invalid hash: ${hash}`);
 
             return {
@@ -52,11 +48,9 @@ const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> =
                 body: 'Invalid hash'
             };
         }
-    } catch (dbError) {
-        console.log(`ENVIRONMENT VARIABLES\n${JSON.stringify(process.env, null, 2)}`);
-        console.log(`EVENT\n${JSON.stringify(event, null, 2)}`);
+    } catch (err) {
+        console.error(`Error Occurred while reading database.\n${err}`);
 
-        console.error(`Error Occurred while reading database.\n${JSON.stringify(dbError, null, 2)}`);
         return {
             statusCode: 500,
             body: 'Internal server error'

@@ -1,5 +1,5 @@
 
-import { APIGatewayEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { APIGatewayEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
 
 const dynDB = new DynamoDB.DocumentClient();
@@ -41,11 +41,7 @@ const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> =
         const item = res.Item;
 
         if (item) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify(item)
-            };
-            // return redirectTo(item.url);
+            return redirectTo(item.url);
         } else {
             console.log(`ENVIRONMENT VARIABLES\n${JSON.stringify(process.env, null, 2)}`);
             console.log(`EVENT\n${JSON.stringify(event, null, 2)}`);

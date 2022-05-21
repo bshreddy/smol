@@ -1,24 +1,24 @@
 import * as path from 'path';
-import {CloudFrontToApiGateway} from '@aws-solutions-constructs/aws-cloudfront-apigateway';
-import {RemovalPolicy, Stack, StackProps} from 'aws-cdk-lib';
-import {LambdaIntegration, RestApi} from 'aws-cdk-lib/aws-apigateway';
-import {Certificate} from 'aws-cdk-lib/aws-certificatemanager';
-import {Table, Attribute, AttributeType, BillingMode} from 'aws-cdk-lib/aws-dynamodb';
-import {Runtime} from 'aws-cdk-lib/aws-lambda';
-import {NodejsFunction, NodejsFunctionProps} from 'aws-cdk-lib/aws-lambda-nodejs';
-import {ARecord, HostedZone, RecordTarget} from 'aws-cdk-lib/aws-route53';
-import {ApiGateway, CloudFrontTarget} from 'aws-cdk-lib/aws-route53-targets';
-import {Construct} from 'constructs';
+import { CloudFrontToApiGateway } from '@aws-solutions-constructs/aws-cloudfront-apigateway';
+import { RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { LambdaIntegration, RestApi } from 'aws-cdk-lib/aws-apigateway';
+import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
+import { Table, Attribute, AttributeType, BillingMode } from 'aws-cdk-lib/aws-dynamodb';
+import { Runtime } from 'aws-cdk-lib/aws-lambda';
+import { NodejsFunction, NodejsFunctionProps } from 'aws-cdk-lib/aws-lambda-nodejs';
+import { ARecord, HostedZone, RecordTarget } from 'aws-cdk-lib/aws-route53';
+import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
+import { Construct } from 'constructs';
 import * as dotenv from 'dotenv';
 
 
 dotenv.config();
 
-export class UrlShortenerStack extends Stack {
+export class SmolStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
         super(scope, id, props);
 
-        const {subDomain, rootDomain, certificateArn} = {
+        const { subDomain, rootDomain, certificateArn } = {
             subDomain: '',
             rootDomain: '',
             certificateArn: '',
@@ -33,7 +33,6 @@ export class UrlShortenerStack extends Stack {
 
         const dynamoTable = new Table(this, 'url_hashes', {
             partitionKey: dynamoTable_partitionKey,
-            tableName: 'url_hashes',
             removalPolicy: RemovalPolicy.DESTROY,
             billingMode: BillingMode.PAY_PER_REQUEST
         });
@@ -65,7 +64,7 @@ export class UrlShortenerStack extends Stack {
         dynamoTable.grantReadWriteData(registerLambda);
         dynamoTable.grantReadData(redirectLambda);
 
-        const api = new RestApi(this, 'url_shortener_api', {
+        const api = new RestApi(this, 'smol_api', {
             restApiName: 'URL Shortener Service'
         });
 
@@ -84,8 +83,8 @@ export class UrlShortenerStack extends Stack {
             domainName: rootDomain
         });
 
-        // eslint-disable-next-line no-unused-vars
-        const domainRecord = new ARecord(this, 'domainRecord', {
+        // eslint-disable-next-line no-new
+        new ARecord(this, 'domainRecord', {
             recordName: domainName,
             zone: hostedZone,
             target: RecordTarget.fromAlias(new CloudFrontTarget(cloudFrontToApiGateway.cloudFrontWebDistribution)),

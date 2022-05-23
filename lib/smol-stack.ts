@@ -41,7 +41,7 @@ export class SmolStack extends Stack {
             tableName: `${id}-urls`,
             partitionKey: dynamoTable_partitionKey,
             timeToLiveAttribute: dynamoTable_timeToLiveAttribute,
-            removalPolicy: RemovalPolicy.DESTROY,
+            removalPolicy: RemovalPolicy.RETAIN,
             billingMode: BillingMode.PAY_PER_REQUEST
         });
 
@@ -95,10 +95,11 @@ export class SmolStack extends Stack {
 
         redirectApi.addMethod('GET', new LambdaIntegration(redirectLambda));
 
-        const cloudFrontToApiGateway = new CloudFrontToApiGateway(this, 'test-cloudfront-apigateway', {
+        const cloudFrontToApiGateway = new CloudFrontToApiGateway(this, 'smol-cloudfront-apigateway', {
             existingApiGatewayObj: api,
             cloudFrontDistributionProps: {
                 certificate: Certificate.fromCertificateArn(this, 'certificate', certificateArn),
+                comment: domainName,
                 domainNames: [domainName],
                 defaultBehavior: {
                     allowedMethods: AllowedMethods.ALLOW_ALL

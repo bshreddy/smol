@@ -15,7 +15,7 @@ const redirectTo = (redirectUrl: string): APIGatewayProxyResult => {
         headers: {
             Location: redirectUrl
         },
-        body: `This is a redriect response.<br /><br />If you aren\'t redirected, <a href=${redirectUrl}>Click Here</a>`
+        body: `This is a redriect response.<br /><br />If you aren\'t redirected, <a href="${redirectUrl}">Click Here</a>`
     };
 };
 

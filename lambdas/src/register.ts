@@ -1,7 +1,9 @@
 
 import * as crypto from 'crypto';
+import { URL } from 'url';
 import { APIGatewayEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { AWSError, DynamoDB } from 'aws-sdk';
+import { Status, STATUS_CODE } from './constants';
 
 const encodeChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
 const dynDB = new DynamoDB.DocumentClient();
@@ -11,29 +13,15 @@ const { tableName, primaryKey } = {
     ...process.env
 };
 
-/* eslint-disable no-unused-vars */
-enum Status {
-    SUCCESS = 'success',
-    CLIENT_ERROR = 'error',
-    INTERNAL_ERROR = 'error'
-}
-/* eslint-enable no-unused-vars */
-
-const statusCode: Record<Status, number> = {
-    [Status.SUCCESS]: 200,
-    [Status.CLIENT_ERROR]: 400,
-    [Status.INTERNAL_ERROR]: 500
-};
-
 const getResponse = (status: Status, body: { [key: string]: any }): APIGatewayProxyResult => {
     return {
-        statusCode: statusCode[status],
+        statusCode: STATUS_CODE[status],
         body: JSON.stringify({ status, ...body })
     };
 };
 
 const getRandomHash = (length: number): string => {
-    const hashBfr = crypto.randomBytes(length) ;//.toString('base64');
+    const hashBfr = crypto.randomBytes(length);
     let hash = '';
 
     for (let i = 0; i < hashBfr.length; i += 1) {
@@ -43,41 +31,56 @@ const getRandomHash = (length: number): string => {
     return hash;
 };
 
-const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
-    const { url } = JSON.parse(event.body ?? '');
+const putItemIntoDDB = async (id: string, url: string, ttl: number) => {
+    await dynDB.put({
+        TableName: tableName,
+        Item: {
+            [primaryKey]: id,
+            url,
+            ttl
+        },
+        ConditionExpression: `attribute_not_exists(${primaryKey})`
+    }).promise();
+};
 
-    const { domainName, hashLen, hashTTL } = {
-        domainName: process.env.domainName,
-        hashLen: Number(process.env.hashLen) ?? 6,
-        hashTTL: Number(process.env.hashTTL) ?? 604800
+const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
+    const { url, ttl } = JSON.parse(event.body ?? '');
+
+    const { domain_name, hash_len, hash_ttl } = {
+        domain_name: process.env.domainName,
+        hash_len: Number(process.env.hashLen) ?? 6,
+        hash_ttl: Number(process.env.hashTTL) ?? 604800
     };
 
-    console.log({ domainName, hashLen, hashTTL });
+    console.log({ domain_name, hash_len, hash_ttl });
 
     if (!event.body) { return getResponse(Status.CLIENT_ERROR, { error: 'No body provided' }); }
     if (!url) { return getResponse(Status.CLIENT_ERROR, { error: 'No "url" found in body' }); }
 
-    // Add protocol if not present
-
     try {
-        const id = getRandomHash(hashLen);
-        const short_url = `https://${domainName}/${id}`;
-        const ttl = Date.now() + hashTTL;
+        const _url = new URL(url);
+        const _ttl = Math.floor(Date.now()/1000) + (ttl ?? hash_ttl);
+        let retries_left = 2;
 
-        await dynDB.put({
-            TableName: tableName,
-            Item: {
-                [primaryKey]: id,
-                url,
-                ttl
-            },
-            ConditionExpression: `attribute_not_exists(${primaryKey})`
-        }).promise();
+        while (retries_left >= 0) {
+            const id = getRandomHash(hash_len);
+            const short_url = `https://${domain_name}/${id}`;
 
-        // An error occurred (ConditionalCheckFailedException)
-        // when calling the PutItem operation: The conditional request failed
+            try {
+                await putItemIntoDDB(id, _url.href, _ttl);
+                return getResponse(Status.SUCCESS, { short_url, url: _url.href, ttl: _ttl });
+            } catch (error) {
+                if ((error as AWSError).code === 'ConditionalCheckFailedException') {
+                    console.log('Conditional check failed. Item already exists.');
+                    retries_left -= 1;
+                } else {
+                    console.error('Error:', (error as AWSError).message);
+                    throw error;
+                }
+            }
+        }
 
-        return getResponse(Status.SUCCESS, { short_url, url, ttl });
+        return getResponse(Status.INTERNAL_ERROR, { error: 'Internal Server Error' });
     } catch (err) {
         console.error(err);
         console.error(`An Error Occurred.\n${err}`);
